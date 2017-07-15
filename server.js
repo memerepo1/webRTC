@@ -10,8 +10,6 @@ app.get('/', function(req, res){
 	res.render('index.ejs');
 });
 
-app.listen(PORT);
-
 app.io.route('ready', function(req) {
 	req.io.join(req.data.chat_room);
 	req.io.join(req.data.signal_room);
@@ -34,3 +32,5 @@ app.io.route('signal', function(req) {
 		message: req.data.message
     });
 });
+
+app.listen(process.env.PORT || 5000)
