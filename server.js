@@ -32,4 +32,4 @@ app.io.route('signal', function(req) {
 	});
 });
 
-app.listen(3000);
+app.listen(process.env.PORT || 5000)
