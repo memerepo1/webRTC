@@ -33,7 +33,4 @@ app.io.route('signal', function(req) {
         type: req.data.type,
 		message: req.data.message
     });
-})
-
-
-
+});
