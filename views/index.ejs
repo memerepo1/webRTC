@@ -58,6 +58,7 @@
 						}, logError);
 					}
 					else {
+						console.log('adding ice candidate');
 						rtcPeerConn.addIceCandidate(new RTCIceCandidate(message.candidate));
 					}
 				}
@@ -91,7 +92,7 @@
 				// get a local stream, show it in our video tag and add it to be sent
 				navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
 				navigator.getUserMedia({
-					'audio': false,
+					'audio': true,
 					'video': true
 				}, function (stream) {
 					displaySignalMessage("going to display my stream...");
