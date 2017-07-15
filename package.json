@@ -1,0 +1,12 @@
+{
+  "name": "intro-webrtc",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "coffee-script": "^1.12.6",
+    "connect": "^3.6.2",
+    "ejs": "latest",
+    "express": "latest",
+    "express.io": "latest"
+  }
+}

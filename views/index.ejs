@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<title>O'Reilly Introduction to WebRTC</title>
+		<link rel="stylesheet" type="text/css" href="styles.css">
+		<script src="/socket.io/socket.io.js"></script>
+	<head>
+	<body>
+	<div>
+		<label>Your Name</label><input id="myName" type"text"/>
+		<label>Message</label><input id="myMessage" type="text"/>
+		<input id="sendMessage" type="submit"/>
+		<div id="chatArea">Message Output:</br>
+		<div id="signalingArea">Signaling Messages:</br></div>
+	</div>
+		<video id="myVideoTag" autoplay></video>
+		<video id="theirVideoTag"autoplay></video>
+		<script>
+		var myName = document.querySelector('#myName');
+		var myMessage = document.querySelector('#myMessage');
+		var sendMessage = document.querySelector('#sendMessage');
+		var chatArea = document.querySelector('#chatArea');
+		var signalingArea = document.querySelector('#signalingArea');
+		var ROOM = "chat";
+		var SIGNAL_ROOM = 'signal_room';
+		var configuration = {
+			'iceServers': [{
+				'url': 'stun:stun.l.google.com:10302'
+			}]
+		};
+		var rtcPeerConn
+
+		startStream();
+
+		io = io.connect();
+		io.emit('ready' , {'chat_room': ROOM, 'signal_room': SIGNAL_ROOM})
+
+		io.emit('signal', {'type': 'user_here', 'message': 'Are you ready for a call?', 'room':SIGNAL_ROOM});
+
+		io.on('announce', function(data) {
+			displayMessage(data.message);
+		});
+
+		function displayMessage(message) {
+			chatArea.innerHTML = chatArea.innerHTML + "<br/>" + message;
+		}
+
+		function displaySignalMessage(message) {
+			signalingArea.innerHTML = chatArea.innerHTML + "<br/>" + message;
+		}
+
+		io.on('message', function(data) {
+			displayMessage(data.author + ': ' + data.message);
+		});
+
+		io.on('signaling_message', function(data) {
+			displaySignalMessage('Signal Received: ' + data.type);
+
+			if(!rtcPeerConn)
+				startSignaling();
+
+			if (data.type != 'user_here') {
+				var message = JSON.parse(data.message);
+				if(message.sdp) {
+					rtcPeerConn.setRemoteDescription(new RTCSessionDescription(message.sdp), function() {
+						if (rtcPeerConn.remoteDescription.type == 'offer') {
+							rtcPeerConn.createAnswer(sendLocalDesc, logError);
+						}
+					}, logError);
+				}
+				else {
+					rtcPeerConn.addIceCandidate(new RTCIceCandidate(message.candidate));
+				}
+			}
+
+		});
+
+		function startSignaling() {
+			displaySignalMessage('start signaling...');
+
+			rtcPeerConn = new webkitRTCPeerConnection(configuration);
+
+			rtcPeerConn.onicecandidate = function (evt) {
+				if(evt.candidate)
+					console.log('hello')
+					io.emit('signal', {"type":"ice candidate", "message": JSON.stringify({ 'candidate': evt.candidate}), "room": SIGNAL_ROOM});
+					displaySignalMessage("completed that ice candidate...");
+			}
+
+			rtcPeerConn.onnegotiationneeded = function () {
+				displaySignalMessage('on negotiation called');
+				rtcPeerConn.createOffer(sendLocalDesc, logError);
+			}
+
+
+			rtcPeerConn.onaddstream = function (evt) {
+				displaySignalMessage('going to add their stream');
+				theirVideoArea.src = URL.createObjectURL(evt.stream);
+			};
+
+			var constraints = {
+			    audio: true,
+			    video: {
+			        width: {
+			            min: 300
+			        },
+			        height: {
+			            min: 300
+			        }
+			    }
+			};
+
+			navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+				console.log('going to display the stream');
+				var theirVideoArea = document.querySelector('#theirVideoTag');
+				theirVideoArea.src = window.URL.createObjectURL(stream);
+				rtcPeerConn.addStream(stream);
+			}).catch(function(err) {
+			  console.log('Error with getUserMedia: ', err)
+			});
+
+
+		}
+
+		function sendLocalDesc(desc) {
+			rtcPeerConn.setLocalDescription(desc, function () {
+				displaySignalMessage('sending local description');
+				io.emit('signal', {"type":"SDP", "message": JSON.stringify({ 'sdp': rtcPeerConn.localDescription }), "room": SIGNAL_ROOM});
+			}, logError);
+		}
+
+
+		sendMessage.addEventListener('click', function(ev) {
+			io.emit('send', {'author': myName.value, 'message': myMessage.value, 'room':ROOM});
+			ev.preventDefault();
+		});
+
+		function startStream() {
+
+			var constraints = {
+			    audio: true,
+			    video: {
+			        width: {
+			            min: 300
+			        },
+			        height: {
+			            min: 300
+			        }
+			    }
+			};
+
+			navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+				console.log(stream)
+				var myVideoArea = document.querySelector('#myVideoTag');
+			  	console.log('Sucess! We have a stream!');
+				myVideoArea.src = window.URL.createObjectURL(stream);
+				myVideoArea.className = "grayscale_filter";
+				myVideoArea.play();
+			}).catch(function(err) {
+			  console.log('Error with getUserMedia: ', err)
+			});
+
+		}
+
+		</script>
+	</body>
+</html>
+
+<p>
+chrome video size preffered resolution
+https://webrtchacks.com/video-constraints-2/
+
+really try to understand what a turn server is
+get a stun server that is google cause not good for production use
+</p>
