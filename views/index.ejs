@@ -115,6 +115,7 @@
 				var theirVideoArea = document.querySelector('#theirVideoTag');
 				theirVideoArea.src = window.URL.createObjectURL(stream);
 				rtcPeerConn.addStream(stream);
+				theirVideoArea.play();
 			}).catch(function(err) {
 			  console.log('Error with getUserMedia: ', err)
 			});
