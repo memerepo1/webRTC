@@ -8,6 +8,7 @@
 	<body>
 		<video id="myVideoTag" autoplay muted></video>
 		<video id="theirVideoTag" autoplay></video>
+		<video id="thirdVideoArea" autoplay></video>
 		<div>
 			<label>Your Name</label><input id="myName" type="text"/>
 			<label>Message</label><input id="myMessage" type="text"/>
@@ -19,6 +20,7 @@
 		<script>
 			var myVideoArea = document.querySelector("#myVideoTag");
 			var theirVideoArea = document.querySelector("#theirVideoTag");
+			var thirdVideoArea = document.querySelector("#thirdVideoArea");
 			var myName = document.querySelector("#myName");
 			var myMessage = document.querySelector("#myMessage");
 			var sendMessage = document.querySelector("#sendMessage");
@@ -26,27 +28,54 @@
 			var signalingArea = document.querySelector("#signalingArea");
 			var ROOM = "chat";
 			var SIGNAL_ROOM = "signal_room";
+			var newRoom = '2ndConn';
+			var newRoom3 = '3ndConn';
 			var configuration = {
 				'iceServers': [{
 					'url': 'stun:stun.l.google.com:19302'
 				}]
 			};
 			var rtcPeerConn;
+			var rtcPeerConn2;
+			var rtcPeerConn3
+			var videoStream;
+			var videoStream2;
+			var videoStream3;
+
+			var socketID;
 			
 			io = io.connect();
+
+			io.on('2ndConnStart', function(data) {
+				startSignaling2();
+			});
+
+			io.on('3ndConnStart', function(data) {
+				startSignaling3();
+			});
+
 			io.emit('ready', {"chat_room": ROOM, "signal_room": SIGNAL_ROOM});
+
+			io.on('socketid', function(data) {
+				socketID = data;
+				//Send a first signaling message to anyone listening
+				//This normally would be on a button click
+				io.emit('signal',{"type":"user_here", "message":data, "room":SIGNAL_ROOM});
+			});
 			
-			//Send a first signaling message to anyone listening
-			//This normally would be on a button click
-			io.emit('signal',{"type":"user_here", "message":"Are you ready for a call?", "room":SIGNAL_ROOM});
-			
-			io.on('signaling_message', function(data) {
+			io.on('disconnected', function(data) {
+				console.log('d2d22d');
 				displaySignalMessage("Signal received: " + data.type);
-				
+				rtcPeerConn = null;
+				io.emit('signal',{"type":"user_here", "message":"Are you ready for a call?", "room":SIGNAL_ROOM});
+			});
+
+			io.on('signaling_message', function(data) {
 				//Setup the RTC Peer Connection object
 				if (!rtcPeerConn)
 					startSignaling();
-					
+					console.log('signaling started')
+				
 				if (data.type != "user_here") {
 					var message = JSON.parse(data.message);
 					if (message.sdp) {
@@ -69,7 +98,7 @@
 				
 				rtcPeerConn = new webkitRTCPeerConnection(configuration);
 				
-				// send any ice candidates to the other peer
+				// send any ice candidates to the other peer how you can connect going through firewalls and routers
 				rtcPeerConn.onicecandidate = function (evt) {
 					if (evt.candidate)
 						io.emit('signal',{"type":"ice candidate", "message": JSON.stringify({ 'candidate': evt.candidate }), "room":SIGNAL_ROOM});
@@ -85,8 +114,24 @@
 				// once remote stream arrives, show it in the remote video element
 				rtcPeerConn.onaddstream = function (evt) {
 					displaySignalMessage("going to add their stream...");
-					theirVideoArea.src = URL.createObjectURL(evt.stream);
+					if(!theirVideoArea.src) {
+						theirVideoArea.src = URL.createObjectURL(evt.stream);
+						console.log('add to their');
+					} else {
+						console.log('added to third');
+						thirdVideoArea.src = URL.createObjectURL(evt.stream);
+					}
+					
 				};
+
+				rtcPeerConn.oniceconnectionstatechange = function(evt) {
+				    if(rtcPeerConn.iceConnectionState == 'disconnected') {
+				    	rtcPeerConn.removeStream(videoStream);
+  						rtcPeerConn.close();
+				    	var disco = 'disconnected';
+				        io.emit('disconnected', {"type": 'disconnected', "message": '', "room":SIGNAL_ROOM})
+				    }
+				}
 				
 				// get a local stream, show it in our video tag and add it to be sent
 				navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
@@ -97,6 +142,7 @@
 					displaySignalMessage("going to display my stream...");
 					myVideoArea.src = URL.createObjectURL(stream);
 					rtcPeerConn.addStream(stream);
+					videoStream = stream;
 				}, logError);
 			  
 			}
@@ -107,10 +153,212 @@
 					io.emit('signal',{"type":"SDP", "message": JSON.stringify({ 'sdp': rtcPeerConn.localDescription }), "room":SIGNAL_ROOM});
 				}, logError);
 			}
+
 			
 			function logError(error) {
 				displaySignalMessage(error.name + ': ' + error.message);
 			}
+
+
+
+
+			io.on('newPeerSignal', function(data) {
+				console.log('GOT IT')
+				//Setup the RTC Peer Connection object
+				if (!rtcPeerConn2)
+					startSignaling2();
+					console.log('signaling started')
+				
+				if (data.type != "user_here") {
+					var message = JSON.parse(data.message);
+					if (message.sdp) {
+						rtcPeerConn2.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+							// if we received an offer, we need to answer
+							if (rtcPeerConn2.remoteDescription.type == 'offer') {
+								rtcPeerConn2.createAnswer(sendLocalDesc2, logError2);
+							}
+						}, logError2);
+					}
+					else {
+						rtcPeerConn2.addIceCandidate(new RTCIceCandidate(message.candidate));
+					}
+				}
+				
+			});
+
+
+			function startSignaling2() {
+				displaySignalMessage2("starting signaling...");
+				
+				rtcPeerConn2 = new webkitRTCPeerConnection(configuration);
+				
+				// send any ice candidates to the other peer how you can connect going through firewalls and routers
+				rtcPeerConn2.onicecandidate = function (evt) {
+					if (evt.candidate)
+						io.emit('signal2nd',{"type":"ice candidate", "message": JSON.stringify({ 'candidate': evt.candidate }), "room":newRoom});
+					displaySignalMessage2("completed that ice candidate...");
+				};
+				
+				// let the 'negotiationneeded' event trigger offer generation
+				rtcPeerConn2.onnegotiationneeded = function () {
+					displaySignalMessage2("on negotiation called");
+					rtcPeerConn2.createOffer(sendLocalDesc2, logError2);
+				}
+				
+				// once remote stream arrives, show it in the remote video element
+				rtcPeerConn2.onaddstream = function (evt) {
+					displaySignalMessage2("going to add their stream...");
+					//come back and fix this later with theirvideostream checking
+					if(!theirVideoArea.src) {
+						theirVideoArea.src = URL.createObjectURL(evt.stream);
+					} else {
+						thirdVideoArea.src = URL.createObjectURL(evt.stream);
+					}
+					
+					
+				};
+
+				rtcPeerConn2.oniceconnectionstatechange = function(evt) {
+				    if(rtcPeerConn2.iceConnectionState == 'disconnected') {
+				    	rtcPeerConn2.removeStream(videoStream2);
+  						rtcPeerConn2.close();
+				    	var disco = 'disconnected';
+				        io.emit('disconnected2', {"type": 'disconnected', "message": '', "room":newRoom})
+				    }
+				}
+				
+				// get a local stream, show it in our video tag and add it to be sent
+				navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+				navigator.getUserMedia({
+					'audio': true,
+					'video': true
+				}, function (stream) {
+					displaySignalMessage2("going to display my stream...");
+					if(!myVideoArea.src) {
+						myVideoArea.src = URL.createObjectURL(stream);
+					}
+					rtcPeerConn2.addStream(stream);
+					videoStream2 = stream;
+				}, logError2);
+			  
+			}
+			
+			function sendLocalDesc2(desc) {
+				rtcPeerConn2.setLocalDescription(desc, function () {
+					displaySignalMessage2("sending local description");
+					io.emit('signal2nd',{"type":"SDP", "message": JSON.stringify({ 'sdp': rtcPeerConn2.localDescription }), "room":newRoom});
+				}, logError2);
+			}
+
+			
+			function logError2(error) {
+				displaySignalMessage2(error.name + ': ' + error.message);
+			}
+
+
+
+
+
+
+
+
+			io.on('newPeerSignal3', function(data) {
+				console.log('GOT IT3')
+				//Setup the RTC Peer Connection object
+				if (!rtcPeerConn3)
+					startSignaling3();
+					console.log('signaling started')
+				
+				if (data.type != "user_here") {
+					var message = JSON.parse(data.message);
+					if (message.sdp) {
+						rtcPeerConn3.setRemoteDescription(new RTCSessionDescription(message.sdp), function () {
+							// if we received an offer, we need to answer
+							if (rtcPeerConn3.remoteDescription.type == 'offer') {
+								rtcPeerConn3.createAnswer(sendLocalDesc3, logError3);
+							}
+						}, logError3);
+					}
+					else {
+						rtcPeerConn3.addIceCandidate(new RTCIceCandidate(message.candidate));
+					}
+				}
+				
+			});
+
+
+			function startSignaling3() {
+				displaySignalMessage3("starting signaling...");
+				
+				rtcPeerConn3 = new webkitRTCPeerConnection(configuration);
+				
+				// send any ice candidates to the other peer how you can connect going through firewalls and routers
+				rtcPeerConn3.onicecandidate = function (evt) {
+					if (evt.candidate)
+						io.emit('signal3nd',{"type":"ice candidate", "message": JSON.stringify({ 'candidate': evt.candidate }), "room":newRoom3});
+					displaySignalMessage3("completed that ice candidate...");
+				};
+				
+				// let the 'negotiationneeded' event trigger offer generation
+				rtcPeerConn3.onnegotiationneeded = function () {
+					displaySignalMessage3("on negotiation called");
+					rtcPeerConn3.createOffer(sendLocalDesc3, logError3);
+				}
+				
+				// once remote stream arrives, show it in the remote video element
+				rtcPeerConn3.onaddstream = function (evt) {
+					displaySignalMessage3("going to add their stream...");
+					//come back and fix this later with theirvideostream checking
+					if(!theirVideoArea.src) {
+						theirVideoArea.src = URL.createObjectURL(evt.stream);
+					} else {
+						thirdVideoArea.src = URL.createObjectURL(evt.stream);
+					}
+					
+					
+				};
+
+				rtcPeerConn3.oniceconnectionstatechange = function(evt) {
+				    if(rtcPeerConn3.iceConnectionState == 'disconnected') {
+				    	rtcPeerConn3.removeStream(videoStream2);
+  						rtcPeerConn3.close();
+				    	var disco = 'disconnected';
+				        io.emit('disconnected3', {"type": 'disconnected', "message": '', "room":newRoom3})
+				    }
+				}
+				
+				// get a local stream, show it in our video tag and add it to be sent
+				navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+				navigator.getUserMedia({
+					'audio': true,
+					'video': true
+				}, function (stream) {
+					displaySignalMessage3("going to display my stream...");
+					if(!myVideoArea.src) {
+						myVideoArea.src = URL.createObjectURL(stream);
+					}
+					rtcPeerConn3.addStream(stream);
+					videoStream3 = stream;
+				}, logError3);
+			  
+			}
+			
+			function sendLocalDesc3(desc) {
+				rtcPeerConn3.setLocalDescription(desc, function () {
+					displaySignalMessage3("sending local description");
+					io.emit('signal3nd',{"type":"SDP", "message": JSON.stringify({ 'sdp': rtcPeerConn3.localDescription }), "room":newRoom3});
+				}, logError3);
+			}
+
+			
+			function logError3(error) {
+				displaySignalMessage2(error.name + ': ' + error.message);
+			}
+
+
+
+
+
 			
 			io.on('announce', function(data) {
 				displayMessage(data.message);
@@ -125,6 +373,23 @@
 			}
 			
 			function displaySignalMessage(message) {
+				signalingArea.innerHTML = signalingArea.innerHTML + "<br/>" + message;
+			}
+
+
+			function displayMessage2(message) {
+				chatArea.innerHTML = chatArea.innerHTML + "<br/>" + message;
+			}
+			
+			function displaySignalMessage2(message) {
+				signalingArea.innerHTML = signalingArea.innerHTML + "<br/>" + message;
+			}
+
+			function displayMessage3(message) {
+				chatArea.innerHTML = chatArea.innerHTML + "<br/>" + message;
+			}
+			
+			function displaySignalMessage3(message) {
 				signalingArea.innerHTML = signalingArea.innerHTML + "<br/>" + message;
 			}
 			
